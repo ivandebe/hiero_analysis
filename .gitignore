@@ -1,0 +1,9 @@
+# Streamlit
+.streamlit/secrets.toml
+
+# data files
+*.csv
+/input_data/
+/output_data/
+/experiments/
+/data/
