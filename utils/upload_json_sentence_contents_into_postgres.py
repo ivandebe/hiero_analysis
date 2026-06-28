@@ -1,7 +1,5 @@
 import json
 from pathlib import Path
-import psycopg
-from psycopg import sql
 
 SQL_QUERY_INITIAL = """
 CREATE TABLE hiero_sentence_contents (
@@ -33,6 +31,15 @@ def upload_sentence_contents_to_postgres(postgres_conn_string: str, json_file_pa
     items = data.get("items")
     if items is None:
         raise ValueError(f"JSON file does not contain an 'items' array: {json_file_path}")
+
+    try:
+        import psycopg
+        from psycopg import sql
+    except ImportError as exc:
+        raise ImportError(
+            "psycopg is required to upload sentence contents to Postgres. "
+            "Install psycopg and retry."
+        ) from exc
 
     insert_query = sql.SQL(
         """

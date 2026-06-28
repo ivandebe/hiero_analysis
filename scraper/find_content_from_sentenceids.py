@@ -207,8 +207,8 @@ def download_sentence_contents(input_json_file, output_json_file="tla_sentence_c
 #     "lemma_125370_sentence_contents.json"
 # )
 
-# Example:
-data = download_sentence_contents(
-    "lemma_125040_urls.json",
-    "lemma_125040_sentence_contents.json"
-)
+if __name__ == "__main__":
+    data = download_sentence_contents(
+        "lemma_125040_urls.json",
+        "lemma_125040_sentence_contents.json"
+    )

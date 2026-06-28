@@ -142,6 +142,6 @@ def download_tla_lemma_sentences(url_or_lemma_id, out_json="tla_lemma_sentences.
 
     return payload
 
-# Example:
-data = download_tla_lemma_sentences(125040, out_json="lemma_125040_sentence_ids.json")
-# print(json.dumps(data, ensure_ascii=False, indent=2))
+if __name__ == "__main__":
+    data = download_tla_lemma_sentences(125040, out_json="lemma_125040_sentence_ids.json")
+    # print(json.dumps(data, ensure_ascii=False, indent=2))

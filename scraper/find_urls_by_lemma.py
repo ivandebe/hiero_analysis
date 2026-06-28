@@ -83,5 +83,5 @@ def download_tla_lemma_sentences(url_or_lemma_id, out_json="tla_lemma_sentences.
 
     return payload
 
-# Example:
-data = download_tla_lemma_sentences(104730, out_json="lemma_104730_urls.json")
+if __name__ == "__main__":
+    data = download_tla_lemma_sentences(104730, out_json="lemma_104730_urls.json")
