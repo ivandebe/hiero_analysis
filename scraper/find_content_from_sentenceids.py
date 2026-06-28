@@ -26,6 +26,9 @@ def _extract_sentence_id(url):
     m = re.search(r"/sentence/([^/?#]+)", url)
     return m.group(1) if m else ""
 
+def _build_sentence_url(sentence_id):
+    return f"{BASE}/sentence/{sentence_id}"
+
 def _visible_lines(soup):
     return [ln.strip() for ln in soup.body.get_text(separator="\n", strip=True).splitlines() if ln.strip()]
 
@@ -140,19 +143,35 @@ def download_sentence_contents(input_json_file, output_json_file="tla_sentence_c
         payload = json.load(f)
 
     items = payload.get("items", [])
+    if not isinstance(items, list):
+        items = []
+
+    sentence_ids = payload.get("sentence_ids", [])
+    if isinstance(sentence_ids, list) and sentence_ids and not items:
+        items = [{"sentence_id": sid} for sid in sentence_ids]
+
     session = requests.Session()
     out_items = []
 
     for item in items:
-        url = item.get("url", "")
+        if isinstance(item, str):
+            sentence_id = item
+            url = _build_sentence_url(sentence_id)
+        else:
+            url = item.get("url", "")
+            sentence_id = item.get("sentence_id", "") or _extract_sentence_id(url)
+            if not url and sentence_id:
+                url = _build_sentence_url(sentence_id)
+
         if not url:
             continue
+
         try:
             out_items.append(extract_sentence_page(url, session=session))
         except Exception as e:
             out_items.append({
                 "url": url,
-                "sentence_id": _extract_sentence_id(url),
+                "sentence_id": sentence_id or _extract_sentence_id(url),
                 "error": str(e),
             })
         if sleep_seconds:
