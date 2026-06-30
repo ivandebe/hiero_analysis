@@ -10,3 +10,4 @@ seaborn
 python-dotenv
 bs4
 networkx
+bertopic

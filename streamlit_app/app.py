@@ -352,7 +352,7 @@ if app_mode == "Lemma Analysis":
 
         df = master_content_df[master_content_df["transliteration"].apply(lambda x: isinstance(x, list) and lemma_row.get("transliteration") in x)]
 
-        tab1, tab2 = st.tabs(["Co-Occurrence Analysis", "Period Analysis"])
+        tab1, tab2, tab3 = st.tabs(["Co-Occurrence Analysis", "Period Analysis", "Topic Analysis"])
 
         with tab1:
             st.markdown("### Graph settings")
@@ -456,6 +456,63 @@ if app_mode == "Lemma Analysis":
                 )
                 dating_fig.update_layout(yaxis=dict(autorange="reversed"), width=900, height=500)
                 st.plotly_chart(dating_fig, width="stretch")
+
+        with tab3:
+            st.subheader("Topic Analysis")
+            st.markdown(
+                """
+                Run topic modeling on the German translations found in the master sentence table.
+                The result will include topic assignments and labels for each sentence.
+                """
+            )
+            with st.form("run_topic_analysis_form"):
+                run_topic_analysis = st.form_submit_button("Run topic analysis")
+
+            if run_topic_analysis:
+                with st.spinner("Running topic analysis..."):
+                    try:
+                        from src.topic_analysis_german_egyptian import run_topic_analysis_dataframe
+                    except Exception as exc:
+                        st.error(f"Could not import topic analysis module: {exc}")
+                        run_topic_analysis = False
+                        topic_df = None
+                    else:
+                        topic_df = run_topic_analysis_dataframe(
+                            master_content_df,
+                            text_column="german_translation",
+                            min_topic_size=5,
+                            nr_topics=None,
+                            language="multilingual",
+                            ngram_max=3,
+                            min_df=2,
+                            extraction_mode="translation_focus",
+                            keep_intermediate_text=False,
+                            output_path=None,
+                        )
+                if run_topic_analysis and topic_df is not None:
+                    st.success("Topic analysis completed.")
+                    st.subheader("Topic Analysis Results")
+                    display_topic_columns = ["sentence_id", "german_translation", "topic", "topic_label"]
+                    st.dataframe(topic_df[display_topic_columns], width="stretch")
+
+                    st.subheader("Most common topics")
+
+                    topic_counts = (
+                        topic_df["topic_label"]
+                        .value_counts()
+                        .reset_index()
+                    )
+                    topic_counts.columns = ["topic_label", "sentence_count"]
+
+                    fig_bar = px.bar(
+                        topic_counts.head(15),
+                        x="sentence_count",
+                        y="topic_label",
+                        orientation="h",
+                        title="Top 15 topics by sentence count",
+                    )
+                    fig_bar.update_layout(yaxis={"categoryorder": "total ascending"})
+                    st.plotly_chart(fig_bar, width="stretch")
 
         st.stop()
     else:
