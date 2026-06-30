@@ -1,11 +1,16 @@
 import json
 import os
+import sys
 from collections import Counter
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from scraper.find_content_from_sentenceids import download_sentence_contents
 from scraper.find_sentenceids_by_lemmaid import download_tla_lemma_sentences
@@ -21,7 +26,6 @@ from utils.lemma_cooccurrence_plotly import (
 
 st.set_page_config(page_title="HieroAnalysis", layout="wide")
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
 
 ALLOWED_EMAILS = {
     email.strip().lower()
@@ -191,7 +195,7 @@ with st.sidebar:
         st.image(str(logo_path), width=300)
     else:
         st.warning("Logo image not found.")
-    app_mode = st.selectbox("Select mode", ["Scraper", "Lemma Analysis"])
+    app_mode = st.selectbox("Select mode", ["Lemma Analysis", "Scraper"])
     postgres_conn_string = os.getenv("POSTGRES_CONN_STRING", "")
     if not postgres_conn_string:
         st.warning("POSTGRES_CONN_STRING is not set. Set it in the environment to upload results to Postgres.")
