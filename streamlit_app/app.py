@@ -196,7 +196,7 @@ with st.sidebar:
     else:
         st.warning("Logo image not found.")
     app_mode = st.selectbox("Select mode", ["Lemma Analysis", "Scraper"])
-    postgres_conn_string = os.getenv("POSTGRES_CONN_STRING", "")
+    postgres_conn_string = st.secrets.get("database", {}).get("POSTGRES_CONN_STRING") or os.getenv("POSTGRES_CONN_STRING", "")
     if not postgres_conn_string:
         st.warning("POSTGRES_CONN_STRING is not set. Set it in the environment to upload results to Postgres.")
 
