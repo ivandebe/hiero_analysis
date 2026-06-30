@@ -61,9 +61,36 @@ def _parse_lemma_list(value) -> list[str]:
     return lemmas
 
 
+def _filter_to_core_closeness(
+    lemma_list: list[str],
+    core_lemma: str | None,
+    closeness: int | None,
+) -> list[str]:
+    if not core_lemma or closeness is None or closeness < 1:
+        return lemma_list
+
+    nearby = set()
+    for index, lemma in enumerate(lemma_list):
+        if lemma != core_lemma:
+            continue
+        for distance in range(1, closeness + 1):
+            if index - distance >= 0:
+                nearby.add(lemma_list[index - distance])
+            if index + distance < len(lemma_list):
+                nearby.add(lemma_list[index + distance])
+
+    if not nearby:
+        return [core_lemma] if core_lemma in lemma_list else []
+
+    nearby.add(core_lemma)
+    return [lemma for lemma in lemma_list if lemma in nearby]
+
+
 def _prepare_dataframe(
     df: pd.DataFrame,
     deduplicate_lemmas_per_sentence: bool = True,
+    core_lemma: str | None = None,
+    closeness: int | None = None,
 ) -> pd.DataFrame:
     _validate_input(df)
 
@@ -74,6 +101,11 @@ def _prepare_dataframe(
     data = data[data["sentence_id"] != ""].copy()
 
     data["lemma_list"] = data["transliteration"].apply(_parse_lemma_list)
+
+    if core_lemma or closeness is not None:
+        data["lemma_list"] = data["lemma_list"].apply(
+            lambda lemmas: _filter_to_core_closeness(lemmas, core_lemma, closeness)
+        )
 
     if deduplicate_lemmas_per_sentence:
         data["lemma_list"] = data["lemma_list"].apply(lambda x: sorted(set(x)))
@@ -140,6 +172,8 @@ def create_lemma_cooccurrence_figure(
     deduplicate_lemmas_per_sentence: bool = True,
     min_edge_weight: int = 2,
     max_lemmas: int | None = 50,
+    core_lemma: str | None = None,
+    closeness: int | None = None,
     layout_seed: int = 42,
     layout_iterations: int = 100,
     title: str = "Lemma co-occurrence graph",
@@ -172,6 +206,8 @@ def create_lemma_cooccurrence_figure(
     data = _prepare_dataframe(
         df,
         deduplicate_lemmas_per_sentence=deduplicate_lemmas_per_sentence,
+        core_lemma=core_lemma,
+        closeness=closeness,
     )
 
     exploded = data[["sentence_id", "lemma_list"]].explode("lemma_list")
@@ -360,6 +396,8 @@ def create_lemma_cooccurrence_tables(
     deduplicate_lemmas_per_sentence: bool = True,
     min_edge_weight: int = 1,
     max_lemmas: int | None = 50,
+    core_lemma: str | None = None,
+    closeness: int | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Return node and edge tables used to build the graph.
@@ -368,6 +406,8 @@ def create_lemma_cooccurrence_tables(
     data = _prepare_dataframe(
         df,
         deduplicate_lemmas_per_sentence=deduplicate_lemmas_per_sentence,
+        core_lemma=core_lemma,
+        closeness=closeness,
     )
 
     exploded = data[["sentence_id", "lemma_list"]].explode("lemma_list")

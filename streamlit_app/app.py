@@ -217,8 +217,11 @@ with st.sidebar:
                 st.warning("No lemmas found in hiero_lemmas.")
             else:
                 st.warning("Connect POSTGRES_CONN_STRING to load lemma IDs.")
+
     else:
         lemma_id = st.number_input("Lemma ID", min_value=1, value=125040, step=1, format="%d")
+        max_lemmas = 40
+        closeness = 3
 
     scrape_button = False
     analyze_button = False
@@ -226,6 +229,22 @@ with st.sidebar:
         scrape_button = st.button("Scrape Thesaurus Linguae Aegyptiae")
     else:
         analyze_button = st.button("Analyze Lemma")
+
+    if app_mode == "Lemma Analysis" and analyze_button:
+        st.session_state.analysis_ready = True
+        st.session_state.analysis_lemma_id = lemma_id
+        st.session_state.graph_params = {}
+
+if app_mode == "Lemma Analysis":
+    if "analysis_ready" not in st.session_state:
+        st.session_state.analysis_ready = False
+    if "analysis_lemma_id" not in st.session_state:
+        st.session_state.analysis_lemma_id = None
+    if "graph_params" not in st.session_state:
+        st.session_state.graph_params = {}
+
+    if st.session_state.analysis_lemma_id != lemma_id:
+        st.session_state.analysis_ready = False
 
 if app_mode == "Scraper":
     if scrape_button:
@@ -292,7 +311,7 @@ if app_mode == "Scraper":
     st.stop()
 
 if app_mode == "Lemma Analysis":
-    if analyze_button:
+    if st.session_state.analysis_ready:
         if not postgres_conn_string:
             st.error("POSTGRES_CONN_STRING is not configured. Set it in the environment to query Postgres.")
             st.stop()
@@ -329,31 +348,82 @@ if app_mode == "Lemma Analysis":
 
         master_content_df = pd.DataFrame(master_content_rows)
         st.subheader("Master sentence contents")
-        st.dataframe(master_content_df, use_container_width=True)
-
+        st.dataframe(master_content_df, width="stretch")
 
         df = master_content_df[master_content_df["transliteration"].apply(lambda x: isinstance(x, list) and lemma_row.get("transliteration") in x)]
 
-        fig = create_lemma_cooccurrence_figure(
-            df,
-            deduplicate_lemmas_per_sentence=True,
-            min_edge_weight=1,
-            max_lemmas=40,
-            title="Lemma co-occurrence by sentence",
-        )
+        st.markdown("### Graph settings")
+        with st.form("generate_graph_form"):
+            max_lemmas = st.slider(
+                "Max number of lemmas",
+                min_value=5,
+                max_value=100,
+                value=st.session_state.graph_params.get("max_lemmas", 40),
+                step=5,
+                help="Limit the number of lemmas shown in the co-occurrence graph.",
+            )
+            closeness = st.slider(
+                "Closeness from core lemma",
+                min_value=1,
+                max_value=10,
+                value=st.session_state.graph_params.get("closeness", 3),
+                step=1,
+                help="Include lemmas up to this many positions away from the core lemma in each sentence.",
+            )
+            generate_graph = st.form_submit_button("Generate graph")
 
-        st.subheader("Co-Occurrence Graph")
-        st.plotly_chart(fig, use_container_width=True)
+        if generate_graph:
+            st.session_state.graph_params = {
+                "max_lemmas": max_lemmas,
+                "closeness": closeness,
+            }
 
-        nodes_df, edges_df = create_lemma_cooccurrence_tables(
-            df,
-            deduplicate_lemmas_per_sentence=True,
-            min_edge_weight=1,
-            max_lemmas=40,
-        )
+        if st.session_state.graph_params:
+            max_lemmas = st.session_state.graph_params["max_lemmas"]
+            closeness = st.session_state.graph_params["closeness"]
 
-        print(nodes_df.head())
-        print(edges_df.sort_values("weight", ascending=False).head(20))
+            st.subheader("Co-Occurrence Graph")
+            st.markdown(
+                """
+                This graph shows how lemmas co-occur within sentences that contain the selected core lemma.
+
+                - **Nodes** represent lemmas.
+                - **Edges** connect lemmas that appear together in the same sentence.
+                - **Weight** shows how many sentences contain both lemmas.
+                - **Closeness** limits the chart to lemmas appearing within the specified number of positions left or right of the core lemma.
+                - **Max lemmas** limits the number of lemmas shown based on frequency.
+                """
+            )
+
+            fig = create_lemma_cooccurrence_figure(
+                df,
+                deduplicate_lemmas_per_sentence=True,
+                min_edge_weight=1,
+                max_lemmas=max_lemmas,
+                core_lemma=lemma_row.get("transliteration"),
+                closeness=closeness,
+                title="Lemma co-occurrence by sentence",
+            )
+
+            st.plotly_chart(fig, width="stretch")
+
+            nodes_df, edges_df = create_lemma_cooccurrence_tables(
+                df,
+                deduplicate_lemmas_per_sentence=True,
+                min_edge_weight=1,
+                max_lemmas=max_lemmas,
+                core_lemma=lemma_row.get("transliteration"),
+                closeness=closeness,
+            )
+
+            st.subheader("Top 10 Co-Occurrence Lemmas")
+            st.write(f"Showing lemmas that co-occur with '{lemma_row.get('transliteration')}' within {closeness} positions in sentences.")
+            st.dataframe(nodes_df.sort_values("sentence_count", ascending=False).head(10), width="stretch")
+
+            # st.subheader("Co-Occurrence Edges")
+            # st.dataframe(edges_df.sort_values("weight", ascending=False), width="stretch")
+        else:
+            st.info("Select settings above and click Generate graph to display the co-occurrence chart.")
 
         st.stop()
     else:
