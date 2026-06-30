@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from itertools import combinations
 from typing import Iterable
+import networkx as nx
 import ast
 
 import pandas as pd
@@ -263,14 +264,6 @@ def create_lemma_cooccurrence_figure(
             ],
         )
         return fig
-
-    try:
-        import networkx as nx
-    except ImportError as exc:
-        raise ImportError(
-            "networkx is required for create_lemma_cooccurrence_figure. "
-            "Install it with `pip install networkx`."
-        ) from exc
 
     graph = nx.Graph()
 
