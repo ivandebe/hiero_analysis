@@ -1,0 +1,10 @@
+streamlit[auth]==1.56.0
+Authlib==1.6.11
+psycopg[binary]==3.3.4
+pandas
+plotly
+numpy
+scikit-learn
+matplotlib
+seaborn
+python-dotenv
