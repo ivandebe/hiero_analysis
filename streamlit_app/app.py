@@ -22,7 +22,33 @@ from utils.lemma_cooccurrence_plotly import (
 st.set_page_config(page_title="HieroAnalysis", layout="wide")
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-LEMMA = "ḥm.t"
+
+ALLOWED_EMAILS = {
+    email.strip().lower()
+    for email in st.secrets["users_permissions"].get("allowed_emails", [])
+}
+
+def login_screen():
+    st.title("Private app")
+    st.write("Please sign in with Google to continue.")
+    st.button("Log in with Google", on_click=st.login)
+
+if not st.user.is_logged_in:
+    login_screen()
+    st.stop()
+
+user_email = str(st.user.get("email", "")).strip().lower()
+user_name = str(st.user.get("name", "")).strip()
+
+if user_email not in ALLOWED_EMAILS:
+    st.error("Your account is not authorized for this app.")
+    st.write(f"Signed in as: {user_email or 'unknown email'}")
+    st.button("Log out", on_click=st.logout)
+    st.stop()
+
+st.sidebar.success(f"Signed in as {user_email}")
+st.sidebar.button("Log out", on_click=st.logout)
+st.sidebar.divider()
 
 
 def load_json(uploaded_file):
