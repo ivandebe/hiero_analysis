@@ -14,6 +14,10 @@ import io
 import zipfile
 from utils.upload_json_sentence_contents_into_postgres import upload_sentence_contents_to_postgres
 from utils.upload_json_lemmas import upload_lemmas_to_postgres
+from utils.lemma_cooccurrence_plotly import (
+    create_lemma_cooccurrence_figure,
+    create_lemma_cooccurrence_tables,
+    )
 
 st.set_page_config(page_title="HieroAnalysis", layout="wide")
 
@@ -49,6 +53,59 @@ def fetch_lemma_from_postgres(postgres_conn_string: str, lemma_id: str):
                 "transliteration": row[1],
                 "sentences_id": row[2] or [],
             }
+
+
+def fetch_lemma_ids_from_postgres(postgres_conn_string: str):
+    try:
+        import psycopg
+        from psycopg import sql
+    except ImportError as exc:
+        raise ImportError(
+            "psycopg is required to query Postgres. Install psycopg and retry."
+        ) from exc
+
+    query = sql.SQL(
+        "SELECT DISTINCT lemma_id FROM hiero_lemmas ORDER BY lemma_id"
+    )
+
+    with psycopg.connect(postgres_conn_string) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            return [row[0] for row in cur.fetchall()]
+
+
+def fetch_sentence_contents_from_postgres(postgres_conn_string: str, sentence_ids: list):
+    try:
+        import psycopg
+        from psycopg import sql
+    except ImportError as exc:
+        raise ImportError(
+            "psycopg is required to query Postgres. Install psycopg and retry."
+        ) from exc
+
+    if not sentence_ids:
+        return []
+
+    query = sql.SQL(
+        "SELECT url, sentence_id, transliteration, german_translation, sources, dating "
+        "FROM hiero_sentence_contents WHERE sentence_id = ANY(%s)"
+    )
+
+    with psycopg.connect(postgres_conn_string) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (sentence_ids,))
+            rows = cur.fetchall()
+            return [
+                {
+                    "url": row[0],
+                    "sentence_id": row[1],
+                    "transliteration": row[2] or [],
+                    "german_translation": row[3] or "",
+                    "sources": row[4] or [],
+                    "dating": row[5] or "",
+                }
+                for row in rows
+            ]
 
 
 def extract_neighbors(items, lemma):
@@ -109,10 +166,29 @@ with st.sidebar:
     else:
         st.warning("Logo image not found.")
     app_mode = st.selectbox("Select mode", ["Scraper", "Lemma Analysis"])
-    lemma_id = st.number_input("Lemma ID", min_value=1, value=125040, step=1, format="%d")
     postgres_conn_string = os.getenv("POSTGRES_CONN_STRING", "")
     if not postgres_conn_string:
         st.warning("POSTGRES_CONN_STRING is not set. Set it in the environment to upload results to Postgres.")
+
+    if app_mode == "Lemma Analysis":
+        lemma_id_options = []
+        if postgres_conn_string:
+            try:
+                lemma_id_options = fetch_lemma_ids_from_postgres(postgres_conn_string)
+            except Exception as e:
+                st.error(f"Could not load lemma ids from Postgres: {e}")
+                lemma_id_options = []
+
+        if lemma_id_options:
+            lemma_id = st.selectbox("Lemma ID", lemma_id_options)
+        else:
+            lemma_id = st.selectbox("Lemma ID", ["No lemma IDs available"])
+            if postgres_conn_string:
+                st.warning("No lemmas found in hiero_lemmas.")
+            else:
+                st.warning("Connect POSTGRES_CONN_STRING to load lemma IDs.")
+    else:
+        lemma_id = st.number_input("Lemma ID", min_value=1, value=125040, step=1, format="%d")
 
     scrape_button = False
     analyze_button = False
@@ -191,6 +267,10 @@ if app_mode == "Lemma Analysis":
             st.error("POSTGRES_CONN_STRING is not configured. Set it in the environment to query Postgres.")
             st.stop()
 
+        if lemma_id == "No lemma IDs available":
+            st.error("No lemma_id options are available for analysis.")
+            st.stop()
+
         try:
             lemma_row = fetch_lemma_from_postgres(postgres_conn_string, str(lemma_id))
         except Exception as e:
@@ -207,8 +287,44 @@ if app_mode == "Lemma Analysis":
         col2.metric("Transliteration", lemma_row.get("transliteration", ""))
         col3.metric("Sentence count", len(sentence_ids))
 
-        st.subheader("Sentence IDs")
-        st.write(sentence_ids)
+        if not sentence_ids:
+            st.warning("This lemma has no sentence_ids stored in hiero_lemmas.")
+            st.stop()
+
+        try:
+            master_content_rows = fetch_sentence_contents_from_postgres(postgres_conn_string, sentence_ids)
+        except Exception as e:
+            st.error(f"Could not query hiero_sentence_contents: {e}")
+            st.stop()
+
+        master_content_df = pd.DataFrame(master_content_rows)
+        st.subheader("Master sentence contents")
+        st.dataframe(master_content_df, use_container_width=True)
+
+
+        df = master_content_df[master_content_df["transliteration"].apply(lambda x: isinstance(x, list) and lemma_row.get("transliteration") in x)]
+
+        fig = create_lemma_cooccurrence_figure(
+            df,
+            deduplicate_lemmas_per_sentence=True,
+            min_edge_weight=1,
+            max_lemmas=40,
+            title="Lemma co-occurrence by sentence",
+        )
+
+        st.subheader("Co-Occurrence Graph")
+        st.plotly_chart(fig, use_container_width=True)
+
+        nodes_df, edges_df = create_lemma_cooccurrence_tables(
+            df,
+            deduplicate_lemmas_per_sentence=True,
+            min_edge_weight=1,
+            max_lemmas=40,
+        )
+
+        print(nodes_df.head())
+        print(edges_df.sort_values("weight", ascending=False).head(20))
+
         st.stop()
     else:
         st.info("Enter a lemma ID and click 'Analyze Lemma' to query hiero_lemmas.")
